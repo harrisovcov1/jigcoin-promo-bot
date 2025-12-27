@@ -1,0 +1,14 @@
+{
+  "name": "jigcoin-promo-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "telegraf": "^4.16.2",
+    "@supabase/supabase-js": "^2.43.4",
+    "dotenv": "^16.4.5"
+  }
+}
