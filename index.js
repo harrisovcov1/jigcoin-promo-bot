@@ -11,6 +11,10 @@ import { createClient } from '@supabase/supabase-js';
  * IMPORTANT: Permission-based promotion only (no discovery, no DMs).
  */
 
+const postingEnabled = process.env.PROMO_POSTING_ENABLED === '1';
+const approvedChats = new Set((process.env.PROMO_APPROVED_CHAT_IDS || '')
+  .split(',').map(id => id.trim()).filter(id => /^-[1-9]\d*$/.test(id)));
+
 const PROMO_BOT_TOKEN = process.env.PROMO_BOT_TOKEN;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -265,7 +269,7 @@ async function logPostAttempt({ zoneId, chatId, templateId, messageId, deepLink,
 }
 
 async function postToZone(zone) {
-  if (!zone) return;
+  if (!postingEnabled || !zone || !approvedChats.has(String(zone.telegram_chat_id))) return;
 
   const chatId = zone.telegram_chat_id;
 
@@ -358,7 +362,7 @@ async function promoCycle() {
 
 // --- Randomized scheduler (true random each cycle) ---
 function scheduleNextCycle(immediate = false) {
-  if (shuttingDown) return;
+  if (!postingEnabled || !approvedChats.size || shuttingDown) return;
   if (cycleTimer) clearTimeout(cycleTimer);
 
   const waitMs = immediate ? 2000 : computeNextIntervalMs();
@@ -378,6 +382,10 @@ function isGetUpdatesConflict(err) {
 
 // --- Launch with webhook cleanup + retry on 409 ---
 async function launchWithRetry() {
+  const identity = await bot.telegram.getMe();
+  if (identity.username?.toLowerCase() !== 'jigcoinpromobot') {
+    throw new Error('Expected the dedicated JIGCOIN promotional bot');
+  }
   // Make sure webhook is not set (prevents webhook/polling conflicts)
   try {
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
@@ -386,7 +394,7 @@ async function launchWithRetry() {
   while (!shuttingDown) {
     try {
       // dropPendingUpdates helps reduce backlog; also reduces weirdness after redeploy
-      await bot.launch({ dropPendingUpdates: true });
+      await bot.launch({ dropPendingUpdates: true }, () => scheduleNextCycle(true));
       return;
     } catch (err) {
       if (isGetUpdatesConflict(err)) {
@@ -448,7 +456,6 @@ process.on('uncaughtException', (err) => {
   );
   console.log(`Quiet hours (UTC): ${QUIET_HOURS || 'none'}`);
 
-  scheduleNextCycle(true);
 })();
 
 // Graceful shutdown (reduces overlap during deploys)
