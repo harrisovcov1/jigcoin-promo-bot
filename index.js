@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { createHash } from 'node:crypto';
 import { Telegraf } from 'telegraf';
 import { createClient } from '@supabase/supabase-js';
 
@@ -99,7 +100,8 @@ function computeNextIntervalMs() {
 
 function buildDeepLink({ zoneId, templateId }) {
   const base = PROMO_LINK_BASE || `https://t.me/${MAIN_BOT_USERNAME}?start=`;
-  const payload = `pz_${String(zoneId).slice(0, 8)}_t_${String(templateId).slice(0, 8)}`;
+  const campaign = createHash('sha256').update(JSON.stringify([String(zoneId), String(templateId)])).digest('hex').slice(0, 24);
+  const payload = `src_promo_${campaign}`;
   return `${base}${encodeURIComponent(payload)}`;
 }
 
